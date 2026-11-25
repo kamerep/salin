@@ -1,0 +1,94 @@
+/* Salin design tokens (Interface Craft C5/C6). Primitive -> semantic.
+   Components use semantic tokens only. Colour carries meaning only on
+   status tags; everything else is neutral plus one accent for actions. */
+:root {
+  color-scheme: light dark;
+
+  /* Primitives */
+  --lagoon-200: #9fe0d2; --lagoon-300: #5cc8b4; --lagoon-600: #0f6b5f; --lagoon-700: #0b5248;
+  --mango-400: #f2b544; --mango-600: #b97a0e;
+  --ink-0: #ffffff; --ink-50: #f6f7f5; --ink-100: #eef1ee; --ink-200: #d9dfdb;
+  --ink-400: #9db0a8; --ink-600: #52605b; --ink-800: #24302c; --ink-900: #16201d;
+  --ink-950: #0e1513;
+
+  /* Semantic: light */
+  --bg: var(--ink-50);
+  --surface: var(--ink-0);
+  --surface-raised: var(--ink-0);
+  --surface-sunk: var(--ink-100);
+  --text: var(--ink-900);
+  --muted: var(--ink-600);
+  --line: var(--ink-200);
+  --line-strong: #b7c2bd;
+  --accent: var(--lagoon-600);
+  --accent-strong: var(--lagoon-700);
+  --accent-soft: #e1efe9;
+  --on-accent: var(--ink-0);
+  --mark: var(--mango-400);
+  --focus: var(--lagoon-600);
+  --scrim: rgb(14 21 19 / 0.45);
+
+  /* Status tags (the only coloured fields) */
+  --ok-fg: #1d5f34; --ok-bg: #e2f1e6; --ok-line: #b5d9bf;
+  --warn-fg: #6f4500; --warn-bg: #fbefd5; --warn-line: #ecd39c;
+  --bad-fg: #9b2419; --bad-bg: #f9e4e0; --bad-line: #eab9b1;
+  --info-fg: var(--ink-800); --info-bg: var(--ink-100); --info-line: var(--ink-200);
+
+  /* Type */
+  --font-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-read: 'Source Serif 4 Variable', 'Source Serif 4', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+  --step--1: 0.8125rem;
+  --step-0: 0.9375rem;
+  --step-1: 1.0625rem;
+  --step-2: 1.3125rem;
+  --step-3: 1.75rem;
+  --leading: 1.55;
+
+  /* Space and shape */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px; --s-7: 48px;
+  --radius-sm: 6px; --radius: 10px; --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px rgb(16 24 22 / 0.06);
+  --shadow-md: 0 1px 2px rgb(16 24 22 / 0.06), 0 10px 28px -14px rgb(16 24 22 / 0.28);
+  --control-h: 44px;
+  --sidebar-w: 236px;
+
+  --z-sticky: 100; --z-overlay: 1100; --z-modal: 1200; --z-toast: 1300;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --dur-press: 160ms;
+  --dur-ui: 200ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: var(--ink-950); --surface: #151e1b; --surface-raised: #1c2724; --surface-sunk: #0b100f;
+    --text: #e4ebe7; --muted: var(--ink-400); --line: #2a3833; --line-strong: #3d4f49;
+    --accent: var(--lagoon-300); --accent-strong: var(--lagoon-200); --accent-soft: #16312b;
+    --on-accent: #062520; --mark: var(--mango-400); --focus: var(--lagoon-300);
+    --scrim: rgb(0 0 0 / 0.6);
+    --ok-fg: #92dfab; --ok-bg: #132b1b; --ok-line: #24513a;
+    --warn-fg: #f3c770; --warn-bg: #2f240e; --warn-line: #5a4519;
+    --bad-fg: #f4a093; --bad-bg: #351815; --bad-line: #64302a;
+    --info-fg: #d3ddd8; --info-bg: #1f2a27; --info-line: #2f3d38;
+    --shadow-sm: none; --shadow-md: 0 0 0 1px var(--line);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: var(--ink-950); --surface: #151e1b; --surface-raised: #1c2724; --surface-sunk: #0b100f;
+  --text: #e4ebe7; --muted: var(--ink-400); --line: #2a3833; --line-strong: #3d4f49;
+  --accent: var(--lagoon-300); --accent-strong: var(--lagoon-200); --accent-soft: #16312b;
+  --on-accent: #062520; --mark: var(--mango-400); --focus: var(--lagoon-300);
+  --scrim: rgb(0 0 0 / 0.6);
+  --ok-fg: #92dfab; --ok-bg: #132b1b; --ok-line: #24513a;
+  --warn-fg: #f3c770; --warn-bg: #2f240e; --warn-line: #5a4519;
+  --bad-fg: #f4a093; --bad-bg: #351815; --bad-line: #64302a;
+  --info-fg: #d3ddd8; --info-bg: #1f2a27; --info-line: #2f3d38;
+  --shadow-sm: none; --shadow-md: 0 0 0 1px var(--line);
+}
+:root[data-theme="light"] { color-scheme: light; }
+
+@media (prefers-contrast: more) {
+  :root { --line: var(--line-strong); --muted: var(--text); }
+}

@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Translate the clipboard (or the current selection with --selection) and
+# show the result as a desktop notification. Bind it to a keyboard shortcut.
+# Needs wl-clipboard on Wayland (sudo apt install wl-clipboard) or xclip on X11.
+set -uo pipefail
+URL="${SALIN_URL:-http://10.246.248.60:8795}"
+primary=""; [ "${1:-}" = "--selection" ] && primary=1
+
+if command -v wl-paste >/dev/null 2>&1; then
+  text="$(wl-paste ${primary:+--primary} --no-newline 2>/dev/null)"
+elif command -v xclip >/dev/null 2>&1; then
+  sel=clipboard; [ -n "$primary" ] && sel=primary
+  text="$(xclip -o -selection "$sel" 2>/dev/null)"
+else
+  notify-send -i salin "Salin" "Install wl-clipboard to translate the clipboard: sudo apt install wl-clipboard"; exit 1
+fi
+[ -z "${text// }" ] && { notify-send -i salin "Salin" "The clipboard is empty."; exit 0; }
+
+notify-send -i salin -t 2000 "Salin" "Translating…"
+body="$(python3 -c 'import json,sys; print(json.dumps({"text": sys.stdin.read()[:8000]}))' <<<"$text")"
+resp="$(curl -sS -m 120 -H 'Content-Type: application/json' -d "$body" "$URL/api/translate")" || {
+  notify-send -i salin -u critical "Salin" "Salin is not reachable at $URL"; exit 1; }
+python3 - "$resp" <<'PY'
+import json, subprocess, sys
+try:
+    d = json.loads(sys.argv[1])
+except ValueError:
+    d = {"detail": "Unreadable response"}
+if "output" not in d:
+    subprocess.run(["notify-send", "-i", "salin", "-u", "critical", "Salin", str(d.get("detail", "Translation failed"))])
+    sys.exit(1)
+o = d["output"]
+lines = [o["translation"]]
+if o["action_requested"] and o["action_summary"]:
+    lines.append("\nAction: " + o["action_summary"] + (f" ({o['deadline']})" if o["deadline"] else ""))
+if o["confidence"] != "high":
+    lines.append(f"\n{o['confidence'].capitalize()} confidence: {o['confidence_reason']}")
+if d["meta"]["provider"] == "ollama":
+    lines.append("\nOffline model used.")
+subprocess.run(["notify-send", "-i", "salin", "-t", "20000", "Salin translation", "\n".join(lines)[:900]])
+try:
+    subprocess.run(["wl-copy"], input=o["translation"].encode(), check=False, timeout=5)
+except (FileNotFoundError, subprocess.TimeoutExpired):
+    pass
+PY

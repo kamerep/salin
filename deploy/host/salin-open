@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Open Salin as a desktop app window. Starts the container if it is stopped.
+set -euo pipefail
+CT="${SALIN_CONTAINER:-salin}"
+URL="${SALIN_URL:-http://10.246.248.60:8795}"
+if [ "$(lxc list "$CT" -c s -f csv 2>/dev/null)" != "RUNNING" ]; then
+  notify-send -i salin "Salin" "Starting the salin container" 2>/dev/null || true
+  lxc start "$CT"
+  for _ in $(seq 1 30); do curl -fsS "$URL/api/health" >/dev/null 2>&1 && break; sleep 1; done
+fi
+BROWSER="$(command -v brave-browser || command -v brave || command -v chromium || command -v google-chrome || true)"
+if [ -n "$BROWSER" ]; then exec "$BROWSER" --app="$URL"; else exec xdg-open "$URL"; fi

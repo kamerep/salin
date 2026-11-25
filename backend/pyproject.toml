@@ -1,0 +1,26 @@
+[project]
+name = "salin"
+version = "0.1.0"
+description = "Taglish-aware translator and reply composer for workplace messages"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic==2.14.0",
+    "fastapi==0.165.0",
+    "uvicorn[standard]==0.54.0",
+    "pydantic==2.14.4",
+    "httpx==0.28.1",
+    "python-multipart==0.0.20",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==8.4.2", "markdown==3.9"]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["salin*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

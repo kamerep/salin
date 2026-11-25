@@ -1,0 +1,20 @@
+# Secrets and confidential data: never commit
+.env
+*.env
+salin.env
+*.db
+*.db-*
+*.sqlite*
+var/
+backups/
+
+# Build and tooling
+.venv/
+node_modules/
+frontend/dist/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+.pytest_cache/
+.vite/

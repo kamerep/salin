@@ -1,0 +1,124 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Setup and operations | Salin</title><style>
+:root { color-scheme: light dark; --bg:#fff; --text:#16201d; --muted:#52605b; --line:#d9dfdb;
+  --sunk:#eef1ee; --accent:#0b5248; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0e1513; --text:#e4ebe7; --muted:#9db0a8;
+  --line:#2a3833; --sunk:#151e1b; --accent:#9fe0d2; } }
+body { margin:0; background:var(--bg); color:var(--text);
+  font:16px/1.6 'IBM Plex Sans', system-ui, sans-serif; }
+main { max-width: 820px; margin: 0 auto; padding: 32px 20px 64px; }
+nav { display:flex; flex-wrap:wrap; gap:8px 16px; padding-bottom:16px; border-bottom:1px solid var(--line); }
+nav a { color: var(--accent); }
+h1 { font: 600 2rem/1.2 'Source Serif 4', Georgia, serif; margin: 24px 0 12px; }
+h2 { font-size: 1.3rem; margin: 32px 0 8px; } h3 { font-size: 1.05rem; margin: 24px 0 6px; }
+a { color: var(--accent); }
+code, kbd { font: 0.9em 'IBM Plex Mono', ui-monospace, monospace; background: var(--sunk);
+  border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+pre { background: var(--sunk); border:1px solid var(--line); border-radius:8px; padding:12px 14px;
+  overflow-x:auto; } pre code { border:0; padding:0; background:none; }
+table { border-collapse: collapse; width:100%; margin: 12px 0; font-size: 0.95rem; }
+th, td { text-align:start; border-bottom:1px solid var(--line); padding:8px 10px; vertical-align:top; }
+th { color: var(--muted); font-size: 0.85rem; }
+@media print { nav { display:none; } main { padding: 0; } pre { white-space: pre-wrap; } }
+</style></head><body><main><nav><a href="user-guide.html">Salin user guide</a><a href="setup.html">Setup and operations</a><a href="security-privacy.html">Security and privacy</a><a href="architecture.html">Architecture and API</a></nav><h1>Setup and operations</h1>
+<p>Salin runs as one process on one port inside a dedicated LXD container: a FastAPI backend that also serves the built React frontend, with SQLite for storage.</p>
+<h2>Requirements</h2>
+<p>On the host:</p>
+<ul>
+<li>LXD with a bridge network (default <code>lxdbr0</code>)</li>
+<li>Node.js 20+ and npm (to build the frontend)</li>
+<li><a href="https://docs.astral.sh/uv/">uv</a> or Python 3.12+ with venv (to run the tests)</li>
+<li>An Anthropic API key from the Claude Console. A claude.ai subscription cannot be used: the API is billed separately, per use.</li>
+<li>Optional: <a href="https://ollama.com">Ollama</a> with <code>llama3.1:8b</code> for the offline fallback</li>
+</ul>
+<h2>First deployment</h2>
+<pre><code class="language-bash">git clone https://github.com/kamerep/salin.git
+cd salin
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -e &quot;backend[dev]&quot;
+deploy/deploy.sh
+</code></pre>
+<p><code>deploy/deploy.sh</code> is idempotent. On the first run it:</p>
+<ol>
+<li>Creates the <code>salin</code> container (Ubuntu 24.04) with a fixed bridge address (default <code>10.246.248.60</code>, override with <code>SALIN_IP</code>).</li>
+<li>Runs the backend tests and builds the frontend.</li>
+<li>Creates the <code>salin</code> system user, <code>/var/lib/salin</code> (database, backups) and <code>/etc/salin/salin.env</code> (mode 600).</li>
+<li>Adds an LXD proxy device so <code>127.0.0.1:11434</code> inside the container reaches Ollama on the host. Nothing is exposed to the LAN.</li>
+<li>Installs the code into <code>/opt/salin</code>, a virtualenv with pinned dependencies, and the <code>salin</code> systemd unit.</li>
+<li>Checks <code>/api/health</code>.</li>
+</ol>
+<p>Then open <code>http://10.246.248.60:8795</code>, go to <strong>Settings</strong> and add the API key.</p>
+<p>Variables: <code>SALIN_CONTAINER</code> (default <code>salin</code>), <code>SALIN_IP</code>, <code>SALIN_PORT</code> (default <code>8795</code>). Pick a port that is free on your machine.</p>
+<h2>Updating</h2>
+<pre><code class="language-bash">git pull
+deploy/deploy.sh            # or --skip-tests
+</code></pre>
+<p>Every deploy first copies the database to <code>/var/lib/salin/backups/</code> (last 10 kept) and takes an LXD snapshot <code>deploy-&lt;timestamp&gt;</code> (last 3 kept).</p>
+<h2>Using salin.lxd</h2>
+<p>The service accepts <code>salin.lxd</code> as a host name. To resolve <code>.lxd</code> names on the host (systemd-resolved), run once per boot or put it in a unit:</p>
+<pre><code class="language-bash">sudo resolvectl dns lxdbr0 &quot;$(lxc network get lxdbr0 ipv4.address | cut -d/ -f1)&quot;
+sudo resolvectl domain lxdbr0 '~lxd'
+</code></pre>
+<p>Then use <code>http://salin.lxd:8795</code>. If you browse by another name, add it to <code>SALIN_ALLOWED_HOSTS</code> in <code>/etc/salin/salin.env</code>.</p>
+<h2>Desktop launcher and clipboard hotkey</h2>
+<pre><code class="language-bash">deploy/host/install-desktop.sh            # launcher, icon, salin-open, salin-clip
+deploy/host/install-desktop.sh --hotkey   # also binds Super+Alt+T (GNOME)
+sudo apt install wl-clipboard             # needed by salin-clip on Wayland
+</code></pre>
+<h2>Configuration</h2>
+<p><code>/etc/salin/salin.env</code> (owned by <code>salin</code>, mode 600):</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SALIN_BIND</code>, <code>SALIN_PORT</code></td>
+<td>Address and port uvicorn listens on (the bridge address only)</td>
+</tr>
+<tr>
+<td><code>SALIN_DATA_DIR</code></td>
+<td>Database directory</td>
+</tr>
+<tr>
+<td><code>SALIN_STATIC_DIR</code></td>
+<td>Built frontend</td>
+</tr>
+<tr>
+<td><code>SALIN_ALLOWED_HOSTS</code></td>
+<td>Host names the server answers to</td>
+</tr>
+<tr>
+<td><code>SALIN_OLLAMA_URL</code>, <code>SALIN_OLLAMA_MODEL</code></td>
+<td>Offline fallback</td>
+</tr>
+<tr>
+<td><code>ANTHROPIC_API_KEY</code></td>
+<td>Written by Settings; can also be set by hand</td>
+</tr>
+</tbody>
+</table>
+<p>After a manual edit: <code>lxc exec salin -- systemctl restart salin</code>.</p>
+<h2>Operations</h2>
+<pre><code class="language-bash">lxc exec salin -- systemctl status salin
+lxc exec salin -- journalctl -u salin -f          # logs: no message text is logged
+lxc exec salin -- ls /var/lib/salin/backups       # database backups
+lxc restore salin deploy-&lt;timestamp&gt;              # roll back a deploy
+</code></pre>
+<p>Restore one database backup:</p>
+<pre><code class="language-bash">lxc exec salin -- systemctl stop salin
+lxc exec salin -- cp /var/lib/salin/backups/salin-&lt;timestamp&gt;.db /var/lib/salin/salin.db
+lxc exec salin -- systemctl start salin
+</code></pre>
+<h2>Development</h2>
+<pre><code class="language-bash"># backend on 127.0.0.1:8796 with a local data folder
+cd backend &amp;&amp; SALIN_DATA_DIR=../var SALIN_ENV_FILE=../var/salin.env \
+  ../.venv/bin/uvicorn --factory salin.main:create_app --port 8796 --reload
+# frontend with hot reload on 5179, proxying /api to 8796
+cd frontend &amp;&amp; npm run dev
+# tests
+cd backend &amp;&amp; ../.venv/bin/python -m pytest -q
+</code></pre>
+<p>Rebuild these documents with <code>.venv/bin/python docs/build.py</code>.</p></main></body></html>

@@ -1,0 +1,207 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Architecture and API | Salin</title><style>
+:root { color-scheme: light dark; --bg:#fff; --text:#16201d; --muted:#52605b; --line:#d9dfdb;
+  --sunk:#eef1ee; --accent:#0b5248; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0e1513; --text:#e4ebe7; --muted:#9db0a8;
+  --line:#2a3833; --sunk:#151e1b; --accent:#9fe0d2; } }
+body { margin:0; background:var(--bg); color:var(--text);
+  font:16px/1.6 'IBM Plex Sans', system-ui, sans-serif; }
+main { max-width: 820px; margin: 0 auto; padding: 32px 20px 64px; }
+nav { display:flex; flex-wrap:wrap; gap:8px 16px; padding-bottom:16px; border-bottom:1px solid var(--line); }
+nav a { color: var(--accent); }
+h1 { font: 600 2rem/1.2 'Source Serif 4', Georgia, serif; margin: 24px 0 12px; }
+h2 { font-size: 1.3rem; margin: 32px 0 8px; } h3 { font-size: 1.05rem; margin: 24px 0 6px; }
+a { color: var(--accent); }
+code, kbd { font: 0.9em 'IBM Plex Mono', ui-monospace, monospace; background: var(--sunk);
+  border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+pre { background: var(--sunk); border:1px solid var(--line); border-radius:8px; padding:12px 14px;
+  overflow-x:auto; } pre code { border:0; padding:0; background:none; }
+table { border-collapse: collapse; width:100%; margin: 12px 0; font-size: 0.95rem; }
+th, td { text-align:start; border-bottom:1px solid var(--line); padding:8px 10px; vertical-align:top; }
+th { color: var(--muted); font-size: 0.85rem; }
+@media print { nav { display:none; } main { padding: 0; } pre { white-space: pre-wrap; } }
+</style></head><body><main><nav><a href="user-guide.html">Salin user guide</a><a href="setup.html">Setup and operations</a><a href="security-privacy.html">Security and privacy</a><a href="architecture.html">Architecture and API</a></nav><h1>Architecture and API</h1>
+<h2>Components</h2>
+<pre><code>Browser (React, Vite build) ──HTTP──▶ uvicorn + FastAPI (container salin)
+                                        ├─ SQLite: glossary, history (FTS5), settings
+                                        ├─ Anthropic API: claude-haiku-5-5 / claude-sonnet-5-5
+                                        └─ Ollama on the host (offline fallback, via LXD proxy)
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>backend/salin/main.py</code></td>
+<td>App factory, routes, security middleware, static frontend</td>
+</tr>
+<tr>
+<td><code>backend/salin/llm.py</code></td>
+<td>Claude provider (structured output, caching, fallback, error mapping) and Ollama provider</td>
+</tr>
+<tr>
+<td><code>backend/salin/prompts.py</code></td>
+<td>System prompt, glossary rendering, request wrappers</td>
+</tr>
+<tr>
+<td><code>backend/salin/schemas.py</code></td>
+<td>Request models and the structured-output schemas</td>
+</tr>
+<tr>
+<td><code>backend/salin/db.py</code></td>
+<td>SQLite schema, glossary, history search, settings</td>
+</tr>
+<tr>
+<td><code>backend/salin/keystore.py</code></td>
+<td>Write-only API key storage in the env file</td>
+</tr>
+<tr>
+<td><code>frontend/src</code></td>
+<td>React app: pages, components, design tokens</td>
+</tr>
+<tr>
+<td><code>deploy/</code></td>
+<td>Container deploy script, systemd unit, desktop launcher and hotkey</td>
+</tr>
+</tbody>
+</table>
+<h2>Model calls</h2>
+<ul>
+<li><strong>Models</strong>: <code>claude-haiku-5-5</code> by default for speed and cost; <code>claude-sonnet-5-5</code> when tone matters. Effort per model is a setting (default low for Haiku, medium for Sonnet).</li>
+<li><strong>Structured output</strong>: <code>client.beta.messages.parse(..., output_format=&lt;Pydantic model&gt;)</code>. The response is validated before it reaches the browser.</li>
+<li><strong>Prompt caching</strong>: the system prompt is two cached blocks, the frozen instructions and then the glossary rendered in a fixed order. Editing the glossary re-writes only the second block. Cache hits show as "Prompt and glossary from cache" under a result.</li>
+<li><strong>Refusal fallback</strong>: Sonnet requests send <code>fallbacks: "default"</code> with the <code>server-side-fallback-2026-07-01</code> beta. Haiku has no server-side fallback; a refusal is reported.</li>
+<li><strong>Offline fallback</strong>: on no key, network failure or a 5xx, and only when enabled and Ollama has the model, the same prompt goes to Ollama's <code>/api/chat</code> with the JSON schema as <code>format</code>. Confidence is forced to low and the result is marked.</li>
+</ul>
+<h3>Translation schema</h3>
+<p><code>source_language</code>, <code>target_language</code>, <code>translation</code>, <code>tone</code>, <code>formality</code>, <code>action_requested</code>, <code>action_summary</code>, <code>deadline</code>, <code>ambiguities[] {phrase, issue, likely_meaning}</code>, <code>glossary_terms_used[]</code>, <code>unknown_terms[] {term, kind, guess}</code>, <code>confidence</code>, <code>confidence_reason</code>, <code>dialect_notes</code>.</p>
+<h3>Reply schema</h3>
+<p><code>reply</code>, <code>back_translation</code>, <code>formality_used</code>, <code>notes[]</code>, <code>cautions[]</code>, <code>needs_native_review</code>, <code>glossary_terms_used[]</code>, <code>confidence</code>.</p>
+<h2>HTTP API</h2>
+<p>All bodies are JSON. Errors are <code>{"detail": "...", "code": "..."}</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Method and path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/health</code></td>
+<td>Liveness</td>
+</tr>
+<tr>
+<td><code>POST /api/translate</code></td>
+<td><code>{text, direction: auto/to_english/to_tagalog, model?: haiku/sonnet, save?, context?}</code></td>
+</tr>
+<tr>
+<td><code>POST /api/compose</code></td>
+<td><code>{text, formality: formal/casual/taglish, model?, save?, reply_to?, instructions?}</code></td>
+</tr>
+<tr>
+<td><code>GET /api/glossary</code></td>
+<td>All entries</td>
+</tr>
+<tr>
+<td><code>POST /api/glossary</code></td>
+<td><code>{term, meaning, kind, notes?}</code>; 409 on a duplicate term</td>
+</tr>
+<tr>
+<td><code>PATCH /api/glossary/{id}</code></td>
+<td>Partial update</td>
+</tr>
+<tr>
+<td><code>DELETE /api/glossary/{id}</code></td>
+<td>Delete</td>
+</tr>
+<tr>
+<td><code>GET /api/glossary/export</code></td>
+<td>CSV download</td>
+</tr>
+<tr>
+<td><code>POST /api/glossary/import</code></td>
+<td>Multipart CSV upload (<code>term,meaning,kind,notes</code>)</td>
+</tr>
+<tr>
+<td><code>POST /api/history/search</code></td>
+<td><code>{q?, mode?, starred?, limit?, offset?}</code></td>
+</tr>
+<tr>
+<td><code>GET /api/history/{id}</code></td>
+<td>Full item</td>
+</tr>
+<tr>
+<td><code>PATCH /api/history/{id}</code></td>
+<td><code>{starred}</code></td>
+</tr>
+<tr>
+<td><code>DELETE /api/history/{id}</code></td>
+<td>Delete one</td>
+</tr>
+<tr>
+<td><code>POST /api/history/clear</code></td>
+<td><code>{confirm: "DELETE", keep_starred}</code></td>
+</tr>
+<tr>
+<td><code>GET /api/settings</code>, <code>PATCH /api/settings</code></td>
+<td>Read and change settings</td>
+</tr>
+<tr>
+<td><code>PUT /api/settings/api-key</code>, <code>DELETE /api/settings/api-key</code></td>
+<td>Set or remove the key</td>
+</tr>
+<tr>
+<td><code>POST /api/settings/test</code></td>
+<td>Check the key</td>
+</tr>
+</tbody>
+</table>
+<p>Interactive docs: <code>/api/docs</code>.</p>
+<p>Example:</p>
+<pre><code class="language-bash">curl -s http://10.246.248.60:8795/api/translate \
+  -H 'Content-Type: application/json' \
+  -d '{&quot;text&quot;: &quot;Pa-check naman po yung invoice, need daw ni MR by EOD&quot;, &quot;save&quot;: false}'
+</code></pre>
+<h2>Build phases</h2>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Scope</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Container, FastAPI <code>/translate</code>, system prompt, JSON response</td>
+<td>Done</td>
+</tr>
+<tr>
+<td>2</td>
+<td>React UI: paste box, direction toggle, result card with notes</td>
+<td>Done</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Glossary CRUD and injection, prompt caching on system prompt and glossary</td>
+<td>Done</td>
+</tr>
+<tr>
+<td>4</td>
+<td>History, search, reply composer with register choice</td>
+<td>Done</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Clipboard hotkey, Ollama offline fallback, desktop launcher</td>
+<td>Done</td>
+</tr>
+</tbody>
+</table>
+<h2>Interface standards</h2>
+<p>The frontend follows the Interface Craft playbook: semantic tokens with a separate dark palette, colour only on status tags, visible focus, 44 px targets, keyboard paths (<kbd>Ctrl</kbd>+<kbd>Enter</kbd> submits), reduced-motion support, no horizontal scroll at 360 px, every state designed (first use, loading, error with retry, empty after filters), undo for reversible deletes and typed confirmation for clearing history.</p></main></body></html>
