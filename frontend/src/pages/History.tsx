@@ -25,7 +25,10 @@ function when(iso: string) {
 export default function History() {
   const toast = useToast();
   const navigate = useNavigate();
-  const { settings } = useSettings();
+  const { settings, langName } = useSettings();
+  const [pair, setPair] = useState('');
+  const [pairs, setPairs] = useState<{ source_lang: string; target_lang: string; n: number }[]>([]);
+  useEffect(() => { api.historyPairs().then(setPairs).catch(() => setPairs([])); }, []);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [items, setItems] = useState<HistoryItem[] | null>(null);
@@ -43,9 +46,10 @@ export default function History() {
     q,
     mode: filter === 'translate' || filter === 'compose' ? filter : null,
     starred: filter === 'starred',
+    pair: pair || null,
     limit: PAGE,
     offset,
-  }), [q, filter]);
+  }), [q, filter, pair]);
 
   useEffect(() => {
     const t = window.setTimeout(async () => {
@@ -156,13 +160,26 @@ export default function History() {
                 <button key={f.v} type="button" className="filter-chip" aria-pressed={filter === f.v} onClick={() => setFilter(f.v)}>{f.label}</button>
               ))}
             </div>
+            {pairs.length > 1 && (
+              <div className="field">
+                <label htmlFor="pair">Languages</label>
+                <select id="pair" className="select" value={pair} onChange={(e) => setPair(e.target.value)}>
+                  <option value="">All language pairs</option>
+                  {pairs.map((p) => (
+                    <option key={`${p.source_lang}>${p.target_lang}`} value={`${p.source_lang}>${p.target_lang}`}>
+                      {langName(p.source_lang)} to {langName(p.target_lang)} ({p.n})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             {error && <Notice tone="bad" title="Could not load history"><p>{error}</p></Notice>}
             {!items && !error && <p className="muted"><Spinner /> Loading</p>}
             {items && items.length === 0 && (
-              q || filter !== 'all' ? (
+              q || filter !== 'all' || pair ? (
                 <div className="empty">
                   <h3>Nothing matches</h3>
-                  <button type="button" className="btn btn-sm" onClick={() => { setQ(''); setFilter('all'); }}>Clear search and filters</button>
+                  <button type="button" className="btn btn-sm" onClick={() => { setQ(''); setFilter('all'); setPair(''); }}>Clear search and filters</button>
                 </div>
               ) : (
                 <div className="empty">
@@ -182,6 +199,7 @@ export default function History() {
                         <span className="h-top">
                           <span className="h-kind">{it.mode === 'translate' ? 'Translation' : 'Reply'}</span>
                           <time dateTime={it.created_at} title={dateFmt.format(new Date(it.created_at))}>{when(it.created_at)}</time>
+                          {it.source_lang && it.target_lang && <span>{langName(it.source_lang)} to {langName(it.target_lang)}</span>}
                           {it.provider === 'ollama' && <span>offline model</span>}
                         </span>
                         <span className="h-src">{it.source_text}</span>
@@ -235,7 +253,9 @@ export default function History() {
                 <hr className="divider" />
                 {selected.mode === 'translate'
                   ? <TranslationView output={(selected.result as TranslateResult).output} meta={(selected.result as TranslateResult).meta} source={selected.source_text} />
-                  : <ComposeView output={(selected.result as ComposeResult).output} meta={(selected.result as ComposeResult).meta} />}
+                  : <ComposeView output={(selected.result as ComposeResult).output} meta={(selected.result as ComposeResult).meta}
+                      target={(selected.result as ComposeResult).request?.target ?? selected.target_lang}
+                      register={(selected.result as ComposeResult).request?.register} draft={selected.source_text} />}
               </div>
             )}
           </section>

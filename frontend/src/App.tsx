@@ -3,6 +3,7 @@ import { NavLink, Route, Routes } from 'react-router-dom';
 import { Logo } from './components/Logo';
 import { Tag } from './components/ui';
 import Glossary from './pages/Glossary';
+import { LanguageForm, LanguageList } from './pages/Languages';
 import History from './pages/History';
 import { PageHead } from './pages/PageHead';
 import Reply from './pages/Reply';
@@ -38,7 +39,7 @@ export default function App() {
             <Logo size={34} />
             <span className="brand-text">
               <span className="brand-name">Salin</span>
-              <span className="brand-sub">Tagalog and Taglish</span>
+              <span className="brand-sub">Workplace translator</span>
             </span>
           </NavLink>
           <div className="nav">
@@ -65,6 +66,8 @@ export default function App() {
             <Route path="/glossary" element={<Glossary />} />
             <Route path="/history" element={<History />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/settings/languages" element={<LanguageList />} />
+            <Route path="/settings/languages/:code" element={<LanguageForm />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

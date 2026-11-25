@@ -2,12 +2,22 @@ import { BookPlus, Database, MessageSquareReply, Timer, Cpu } from 'lucide-react
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
-import type { CallMeta, ComposeOutput, Kind, ReplyDraftState, TranslationOutput, UnknownTerm } from '../types';
+import { useSettings } from '../state';
+import type { CallMeta, ComposeOutput, Kind, RegisterDef, ReplyDraftState, TranslationOutput, UnknownTerm } from '../types';
+import { DownloadButton, ListenButton } from './output';
 import { useToast } from './toast';
 import { ConfidenceTag, CopyButton, Notice, Tag } from './ui';
 
-const LANG: Record<string, string> = { tagalog: 'Tagalog', english: 'English', taglish: 'Taglish', other: 'Other' };
-const FORMALITY: Record<string, string> = { formal: 'Formal', neutral: 'Neutral', casual: 'Casual', taglish: 'Office Taglish' };
+function NativeReview({ show, compose }: { show: boolean; compose?: boolean }) {
+  if (!show) return null;
+  return (
+    <Notice tone="warn" title={compose ? 'Have a native speaker check this before sending' : 'Have a native speaker check this'}>
+      <p>{compose
+        ? 'It is sensitive, or in a language where machine output is less reliable. Machine text can miss nuance that matters here.'
+        : 'The language is one where machine translation is less reliable, or the content is sensitive. Do not act on it unchecked.'}</p>
+    </Notice>
+  );
+}
 const KIND_LABEL: Record<Kind, string> = { person: 'Person', entity: 'Company or entity', abbreviation: 'Abbreviation', term: 'Term' };
 
 const num = new Intl.NumberFormat();
@@ -104,18 +114,29 @@ function UnknownTerms({ items }: { items: UnknownTerm[] }) {
 
 export function TranslationView({ output, meta, source }: { output: TranslationOutput; meta: CallMeta; source: string }) {
   const navigate = useNavigate();
+  const { langName } = useSettings();
   return (
     <div className="stack">
       <Warnings meta={meta} />
+      <NativeReview show={output.needs_native_review} />
       <div className="stack">
         <div className="row-between">
-          <h2 className="panel-title">{LANG[output.target_language]} translation</h2>
+          <h2 className="panel-title">{langName(output.target_language)} translation</h2>
           <ConfidenceTag value={output.confidence} />
         </div>
-        <p className="result-text" lang={output.target_language === 'tagalog' ? 'tl' : 'en'}>{output.translation}</p>
+        <p className="result-text" lang={output.target_language}>{output.translation}</p>
         <div className="row">
           <CopyButton text={output.translation} />
-          {output.target_language === 'english' && (
+          <ListenButton text={output.translation} lang={output.target_language} />
+          <DownloadButton filename="salin-translation" sections={[
+            [`Original (${output.source_language_name || langName(output.source_language)})`, source],
+            [`Translation (${langName(output.target_language)})`, output.translation],
+            ['Action requested', output.action_requested ? `${output.action_summary}${output.deadline ? ` (${output.deadline})` : ''}` : 'None'],
+            ['Tone and formality', `${output.tone}; ${output.formality}`],
+            ['Confidence', `${output.confidence}: ${output.confidence_reason}`],
+            ['Unclear phrases', output.ambiguities.map((a) => `"${a.phrase}": ${a.issue} Likely: ${a.likely_meaning}`).join('\n')],
+          ]} />
+          {output.source_language !== 'en' && (
             <button type="button" className="btn btn-sm" onClick={() => navigate('/reply', { state: { replyTo: source } satisfies ReplyDraftState })}>
               <MessageSquareReply size={16} aria-hidden="true" />Draft a reply
             </button>
@@ -132,8 +153,8 @@ export function TranslationView({ output, meta, source }: { output: TranslationO
         </dd>
         {output.deadline && (<><dt>Deadline</dt><dd>{output.deadline}</dd></>)}
         <dt>Tone</dt><dd>{output.tone}</dd>
-        <dt>Formality</dt><dd>{FORMALITY[output.formality]}</dd>
-        <dt>Source language</dt><dd>{LANG[output.source_language]}</dd>
+        <dt>Formality</dt><dd>{output.formality}</dd>
+        <dt>Source language</dt><dd>{output.source_language_name || langName(output.source_language)}</dd>
         <dt>Confidence</dt><dd>{output.confidence_reason}</dd>
         {output.dialect_notes && (<><dt>Regional language</dt><dd>{output.dialect_notes}</dd></>)}
         {output.glossary_terms_used.length > 0 && (
@@ -161,22 +182,29 @@ export function TranslationView({ output, meta, source }: { output: TranslationO
   );
 }
 
-export function ComposeView({ output, meta, onRegenerate, busy }: { output: ComposeOutput; meta: CallMeta; onRegenerate?: () => void; busy?: boolean }) {
+export function ComposeView({ output, meta, target, register, draft, onRegenerate, busy }: {
+  output: ComposeOutput; meta: CallMeta; target: string; register?: RegisterDef; draft: string;
+  onRegenerate?: () => void; busy?: boolean;
+}) {
+  const { langName } = useSettings();
   return (
     <div className="stack">
       <Warnings meta={meta} />
-      {output.needs_native_review && (
-        <Notice tone="warn" title="Have a native speaker check this before sending">
-          <p>This reads as legal, regulatory or otherwise sensitive. Machine Tagalog can miss nuance that matters here.</p>
-        </Notice>
-      )}
+      <NativeReview show={output.needs_native_review} compose />
       <div className="row-between">
-        <h2 className="panel-title">Tagalog reply, {FORMALITY[output.formality_used].toLowerCase()}</h2>
+        <h2 className="panel-title">{langName(target)} reply{register ? `, ${register.label.toLowerCase()}` : ''}</h2>
         <ConfidenceTag value={output.confidence} />
       </div>
-      <p className="result-text" lang="tl">{output.reply}</p>
+      <p className="result-text" lang={target}>{output.reply}</p>
       <div className="row">
         <CopyButton text={output.reply} label="Copy reply" />
+        <ListenButton text={output.reply} lang={target} />
+        <DownloadButton filename="salin-reply" sections={[
+          ['Your draft', draft],
+          [`Reply (${langName(target)}${register ? `, ${register.label}` : ''})`, output.reply],
+          ['What it says in English', output.back_translation],
+          ['Check before sending', output.cautions.join('\n')],
+        ]} />
         {onRegenerate && <button type="button" className="btn btn-sm" onClick={onRegenerate} disabled={busy}>Try again</button>}
       </div>
       <hr className="divider" />

@@ -1,8 +1,9 @@
-import { Download, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { ChevronRight, Download, Pencil, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { useToast } from '../components/toast';
 import { Notice, Spinner } from '../components/ui';
+import { useSettings } from '../state';
 import type { GlossaryEntry, Kind } from '../types';
 import { PageHead } from './PageHead';
 
@@ -14,8 +15,40 @@ const KINDS: { value: Kind; label: string; plural: string }[] = [
 ];
 const kindLabel = (k: Kind) => KINDS.find((x) => x.value === k)!.label;
 
-interface Draft { term: string; meaning: string; kind: Kind; notes: string }
-const EMPTY: Draft = { term: '', meaning: '', kind: 'person', notes: '' };
+interface Draft { term: string; meaning: string; kind: Kind; notes: string; spellings: Record<string, string> }
+const EMPTY: Draft = { term: '', meaning: '', kind: 'person', notes: '', spellings: {} };
+
+function SpellingsEditor({ value, onChange, idPrefix }: { value: Record<string, string>; onChange: (v: Record<string, string>) => void; idPrefix: string }) {
+  const { enabled, langName } = useSettings();
+  const used = Object.keys(value);
+  const free = enabled.filter((l) => !used.includes(l.code));
+  return (
+    <details className="more" open={used.length > 0}>
+      <summary><ChevronRight size={16} aria-hidden="true" />Spelling in other languages {used.length > 0 && `(${used.length})`}</summary>
+      <div className="stack" style={{ marginBlockStart: 8 }}>
+        <p className="hint">Optional. How the name or term should be written in a given language, for example a title or a transliteration.</p>
+        {used.map((code) => (
+          <div className="row" key={code}>
+            <label className="label" htmlFor={`${idPrefix}-sp-${code}`} style={{ minInlineSize: 96 }}>{langName(code)}</label>
+            <input id={`${idPrefix}-sp-${code}`} className="input" style={{ flex: '1 1 200px', inlineSize: 'auto' }} maxLength={200}
+              value={value[code]} onChange={(e) => onChange({ ...value, [code]: e.target.value })} />
+            <button type="button" className="btn btn-sm btn-icon btn-ghost" aria-label={`Remove ${langName(code)} spelling`}
+              onClick={() => { const next = { ...value }; delete next[code]; onChange(next); }}><X size={16} aria-hidden="true" /></button>
+          </div>
+        ))}
+        {free.length > 0 && (
+          <div className="row">
+            <select className="select" style={{ inlineSize: 'auto' }} aria-label="Add a spelling for" value=""
+              onChange={(e) => e.target.value && onChange({ ...value, [e.target.value]: '' })}>
+              <option value="">Add a spelling for...</option>
+              {free.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
 
 function EntryForm({ initial, submitLabel, onSubmit, onCancel, idPrefix }: {
   initial: Draft; submitLabel: string; idPrefix: string;
@@ -33,7 +66,8 @@ function EntryForm({ initial, submitLabel, onSubmit, onCancel, idPrefix }: {
     setErrors(next);
     if (next.term || next.meaning) return;
     setBusy(true);
-    const err = await onSubmit({ ...d, term: d.term.trim(), meaning: d.meaning.trim(), notes: d.notes.trim() });
+    const spellings = Object.fromEntries(Object.entries(d.spellings).map(([k, v]) => [k, v.trim()]).filter(([, v]) => v));
+    const err = await onSubmit({ ...d, term: d.term.trim(), meaning: d.meaning.trim(), notes: d.notes.trim(), spellings });
     setBusy(false);
     if (err) setErrors({ form: err });
     else if (!onCancel) { setD({ ...EMPTY, kind: d.kind }); termRef.current?.focus(); }
@@ -67,6 +101,7 @@ function EntryForm({ initial, submitLabel, onSubmit, onCancel, idPrefix }: {
             onChange={(e) => setD({ ...d, notes: e.target.value })} />
         </div>
       </div>
+      <SpellingsEditor idPrefix={idPrefix} value={d.spellings} onChange={(spellings) => setD({ ...d, spellings })} />
       <div className="row">
         <button type="submit" className="btn btn-primary" disabled={busy}>{busy && <Spinner />}{submitLabel}</button>
         {onCancel && <button type="button" className="btn" onClick={onCancel}>Cancel</button>}
@@ -77,6 +112,7 @@ function EntryForm({ initial, submitLabel, onSubmit, onCancel, idPrefix }: {
 
 export default function Glossary() {
   const toast = useToast();
+  const { langName } = useSettings();
   const [entries, setEntries] = useState<GlossaryEntry[] | null>(null);
   const [loadError, setLoadError] = useState('');
   const [q, setQ] = useState('');
@@ -136,7 +172,7 @@ export default function Glossary() {
           label: 'Undo',
           run: async () => {
             try {
-              const back = await api.addTerm({ term: entry.term, meaning: entry.meaning, kind: entry.kind, notes: entry.notes });
+              const back = await api.addTerm({ term: entry.term, meaning: entry.meaning, kind: entry.kind, notes: entry.notes, spellings: entry.spellings });
               setEntries((xs) => [...(xs ?? []), back]);
             } catch (e) { toast.show((e as Error).message, { tone: 'bad' }); }
           },
@@ -208,7 +244,7 @@ export default function Glossary() {
           {entries && entries.length === 0 && (
             <div className="empty">
               <h3>No entries yet</h3>
-              <p>Add the people, companies and shorthand that show up in messages, such as “MR = Maria Reyes”. You can also import a CSV with the columns term, meaning, kind and notes.</p>
+              <p>Add the people, companies and shorthand that show up in messages, such as “MR = Maria Reyes”. You can also import a CSV with the columns term, meaning, kind, notes and spellings (for example tl=Gng. Reyes | sw=Bi. Reyes).</p>
             </div>
           )}
           {entries && entries.length > 0 && shown.length === 0 && (
@@ -225,13 +261,18 @@ export default function Glossary() {
                 <tbody>
                   {shown.map((e) => editing === e.id ? (
                     <tr key={e.id}><td colSpan={5}>
-                      <EntryForm idPrefix={`edit-${e.id}`} initial={{ term: e.term, meaning: e.meaning, kind: e.kind, notes: e.notes }}
+                      <EntryForm idPrefix={`edit-${e.id}`} initial={{ term: e.term, meaning: e.meaning, kind: e.kind, notes: e.notes, spellings: e.spellings ?? {} }}
                         submitLabel="Save" onSubmit={(d) => update(e.id, d)} onCancel={() => setEditing(null)} />
                     </td></tr>
                   ) : (
                     <tr key={e.id}>
                       <td className="term">{e.term}</td>
-                      <td>{e.meaning}</td>
+                      <td>
+                        {e.meaning}
+                        {Object.keys(e.spellings ?? {}).length > 0 && (
+                          <span className="block small muted">{Object.entries(e.spellings).map(([k, v]) => `${langName(k)}: ${v}`).join('; ')}</span>
+                        )}
+                      </td>
                       <td className="muted">{kindLabel(e.kind)}</td>
                       <td className="muted">{e.notes}</td>
                       <td className="actions">

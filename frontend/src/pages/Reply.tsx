@@ -2,17 +2,19 @@ import { ChevronRight, PenLine, RotateCcw, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError, api } from '../api';
+import { LanguageSelect } from '../components/LanguageSelect';
+import { Recorder } from '../components/Recorder';
 import { ComposeView } from '../components/results';
 import { Kbd, Notice, ResultSkeleton, Segmented, Spinner, Switch, modKey, submitOnModEnter, useDelayed } from '../components/ui';
 import { useDraft, useSettings } from '../state';
-import type { ComposeResult, Formality, ModelChoice, ReplyDraftState } from '../types';
+import type { ComposeResult, ModelChoice, ReplyDraftState } from '../types';
 import { PageHead } from './PageHead';
 import { ModelPicker, NoKeyNotice } from './Translate';
 
 const MAX = 8000;
 
 export default function Reply() {
-  const { settings } = useSettings();
+  const { settings, enabled } = useSettings();
   const location = useLocation();
   const navigate = useNavigate();
   const incoming = (location.state as ReplyDraftState | null)?.replyTo ?? '';
@@ -20,10 +22,14 @@ export default function Reply() {
   const replyTo = incoming || replyToDraft;
   const [text, setText] = useDraft('r.text', '');
   const [instructions, setInstructions] = useDraft('r.instructions', '');
-  const [formalitySel, setFormality] = useDraft<Formality | null>('r.formality', null);
+  const [targetSel, setTarget] = useDraft<string | null>('r.target', null);
+  const [registerSel, setRegister] = useDraft<string | null>('r.register', null);
   const [modelSel, setModel] = useDraft<ModelChoice | null>('r.model', null);
   const [saveSel, setSave] = useDraft<boolean | null>('r.save', null);
-  const formality = formalitySel ?? settings?.default_register ?? 'formal';
+  const target = targetSel ?? settings?.reply_language ?? 'tl';
+  const lang = enabled.find((l) => l.code === target);
+  const registers = lang?.registers ?? [];
+  const register = registers.find((r) => r.id === registerSel) ?? registers[0];
   const model = modelSel ?? settings?.default_model ?? 'haiku';
   const save = saveSel ?? settings?.save_history ?? true;
   const [busy, setBusy] = useState(false);
@@ -50,7 +56,7 @@ export default function Reply() {
     setBusy(true);
     setError(null);
     try {
-      setResult(await api.compose({ text, formality, model, save, reply_to: replyTo, instructions }, abort.current.signal));
+      setResult(await api.compose({ text, target, register_id: register?.id ?? '', model, save, reply_to: replyTo, instructions }, abort.current.signal));
     } catch (e) {
       if ((e as Error).name !== 'AbortError') setError(e as ApiError);
     } finally {
@@ -60,7 +66,7 @@ export default function Reply() {
 
   return (
     <>
-      <PageHead title="Reply" desc="Write what you want to say in English. Salin drafts it in Tagalog in the register you pick." />
+      <PageHead title="Reply" desc="Write or dictate what you want to say in English. Salin drafts it in the language and register you pick." />
       <div className="page-body">
         <NoKeyNotice />
         <div className="work">
@@ -92,12 +98,13 @@ export default function Reply() {
                 placeholder="Yes, I will check the invoice and send it to MR before 5 pm." autoFocus />
             </div>
 
-            <Segmented legend="Register" value={formality} onChange={setFormality}
-              options={[
-                { value: 'formal', label: 'Formal', sub: 'po, opo' },
-                { value: 'casual', label: 'Casual' },
-                { value: 'taglish', label: 'Office Taglish' },
-              ]} />
+            <Recorder language="en" onText={(t) => setText((cur) => (cur.trim() ? `${cur.trimEnd()} ${t}` : t))} label="Dictate the draft" />
+
+            <LanguageSelect label="Reply in" value={target} onChange={(c) => { setTarget(c); setRegister(null); }} languages={enabled} />
+            {register && (
+              <Segmented legend="Register" value={register.id} onChange={setRegister}
+                options={registers.map((r) => ({ value: r.id, label: r.label, sub: r.hint || undefined }))} />
+            )}
             <ModelPicker value={model} onChange={setModel} />
 
             <div className="field">
@@ -127,12 +134,12 @@ export default function Reply() {
               </div>
             )}
             {busy && showSkeleton && <ResultSkeleton />}
-            {!busy && !error && result && <ComposeView output={result.output} meta={result.meta} onRegenerate={() => void submit()} busy={busy} />}
+            {!busy && !error && result && <ComposeView output={result.output} meta={result.meta} target={result.request.target} register={result.request.register} draft={text} onRegenerate={() => void submit()} busy={busy} />}
             {!busy && !error && !result && (
               <div className="empty">
-                <h3>Your Tagalog reply appears here</h3>
+                <h3>Your {lang?.name ?? "translated"} reply appears here</h3>
                 <p>With an English back-translation so you can check it says what you meant.</p>
-                <p className="small">For legal or regulatory messages to a client, have a native speaker check the Tagalog before sending.</p>
+                <p className="small">For legal or regulatory messages to a client, have a native speaker check the reply before sending.</p>
               </div>
             )}
           </section>

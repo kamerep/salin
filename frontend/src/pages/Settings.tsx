@@ -1,5 +1,6 @@
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useToast } from '../components/toast';
 import { ConfirmDialog, Notice, Segmented, Spinner, Switch, Tag } from '../components/ui';
@@ -107,8 +108,17 @@ function ApiKeySection({ s }: { s: S }) {
   );
 }
 
+function LangPick({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+  const { enabled } = useSettings();
+  return (
+    <select id={id} className="select" style={{ inlineSize: 'auto' }} value={value} onChange={(e) => onChange(e.target.value)}>
+      {enabled.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
+    </select>
+  );
+}
+
 export default function Settings() {
-  const { settings: s, update, error } = useSettings();
+  const { settings: s, update, error, langName } = useSettings();
   const toast = useToast();
   const [theme, setTheme] = useState<ThemeChoice>(readTheme());
 
@@ -152,11 +162,62 @@ export default function Settings() {
                 <div className="setting-text"><span className="setting-name">Effort, careful model</span></div>
                 <Segmented legend="Effort for the careful model" hideLegend value={s.effort_sonnet} onChange={(v) => void change({ effort_sonnet: v })} options={EFFORT_OPTS} />
               </div>
-              <div className="setting">
-                <div className="setting-text"><span className="setting-name">Default reply register</span></div>
-                <Segmented legend="Default reply register" hideLegend value={s.default_register} onChange={(v) => void change({ default_register: v })}
-                  options={[{ value: 'formal', label: 'Formal' }, { value: 'casual', label: 'Casual' }, { value: 'taglish', label: 'Office Taglish' }]} />
+            </section>
+
+            <section className="panel" aria-labelledby="lang-h">
+              <div className="panel-head">
+                <h2 id="lang-h" className="panel-title">Languages</h2>
+                <Link className="btn btn-sm" to="/settings/languages">Manage languages</Link>
               </div>
+              <div className="setting">
+                <div className="setting-text">
+                  <label className="setting-name" htmlFor="dt">Translate into</label>
+                  <span className="hint">The default target on the Translate page.</span>
+                </div>
+                <LangPick id="dt" value={s.default_target} onChange={(v) => void change({ default_target: v })} />
+              </div>
+              <div className="setting">
+                <div className="setting-text">
+                  <label className="setting-name" htmlFor="sl">Second language</label>
+                  <span className="hint">With Detect, a message already in the target language goes into this one instead.</span>
+                </div>
+                <LangPick id="sl" value={s.second_language} onChange={(v) => void change({ second_language: v })} />
+              </div>
+              <div className="setting">
+                <div className="setting-text">
+                  <label className="setting-name" htmlFor="rl">Reply in</label>
+                  <span className="hint">The default language on the Reply page.</span>
+                </div>
+                <LangPick id="rl" value={s.reply_language} onChange={(v) => void change({ reply_language: v })} />
+              </div>
+            </section>
+
+            <section className="panel" aria-labelledby="speech-h">
+              <div className="panel-head">
+                <h2 id="speech-h" className="panel-title">Voice</h2>
+                {s.speech.installed ? <Tag tone="ok">Speech input available</Tag> : <Tag tone="bad">Speech input not installed</Tag>}
+              </div>
+              <div className="setting">
+                <div className="setting-text">
+                  <span className="setting-name">Record messages and dictate replies</span>
+                  <span className="hint">Speech is transcribed inside the container; the audio is never sent anywhere or stored.</span>
+                </div>
+                <Switch checked={s.speech_input} onChange={(v) => void change({ speech_input: v })} label={<span className="sr-only">Speech input</span>} />
+              </div>
+              <div className="setting">
+                <div className="setting-text">
+                  <span className="setting-name">Speech model</span>
+                  <span className="hint">
+                    Larger is more accurate and slower. {s.speech.downloaded ? 'Downloaded.' : 'Downloaded on first use (needs internet once).'}
+                  </span>
+                </div>
+                <Segmented legend="Speech model" hideLegend value={s.speech_model} onChange={(v) => void change({ speech_model: v })}
+                  options={[{ value: 'base', label: 'Base' }, { value: 'small', label: 'Small' }, { value: 'medium', label: 'Medium' }]} />
+              </div>
+              <p className="hint">
+                Listen uses a browser voice for the language when one is installed, otherwise the offline voice
+                ({s.speech.voices.length ? s.speech.voices.map((c) => langName(c)).join(', ') : 'none installed'}).
+              </p>
             </section>
 
             <section className="panel" aria-labelledby="priv-h">

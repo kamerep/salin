@@ -1,11 +1,13 @@
-import { ChevronRight, Languages, RotateCcw } from 'lucide-react';
+import { ArrowLeftRight, ChevronRight, Languages, RotateCcw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, api } from '../api';
+import { LanguageSelect } from '../components/LanguageSelect';
+import { Recorder } from '../components/Recorder';
 import { TranslationView } from '../components/results';
 import { Kbd, Notice, ResultSkeleton, Segmented, Spinner, Switch, modKey, submitOnModEnter, useDelayed } from '../components/ui';
 import { useDraft, useSettings } from '../state';
-import type { Direction, ModelChoice, TranslateResult } from '../types';
+import type { ModelChoice, TranslateResult } from '../types';
 import { PageHead } from './PageHead';
 
 const MAX = 8000;
@@ -34,10 +36,12 @@ export function NoKeyNotice() {
 }
 
 export default function Translate() {
-  const { settings } = useSettings();
+  const { settings, enabled } = useSettings();
   const [text, setText] = useDraft('t.text', '');
   const [context, setContext] = useDraft('t.context', '');
-  const [direction, setDirection] = useDraft<Direction>('t.direction', 'auto');
+  const [source, setSource] = useDraft('t.source', 'auto');
+  const [targetSel, setTarget] = useDraft<string | null>('t.target', null);
+  const target = targetSel ?? settings?.default_target ?? 'en';
   const [modelSel, setModel] = useDraft<ModelChoice | null>('t.model', null);
   const [saveSel, setSave] = useDraft<boolean | null>('t.save', null);
   const model = modelSel ?? settings?.default_model ?? 'haiku';
@@ -58,7 +62,7 @@ export default function Translate() {
     setBusy(true);
     setError(null);
     try {
-      const data = await api.translate({ text, direction, model, save, context }, abort.current.signal);
+      const data = await api.translate({ text, source, target, model, save, context }, abort.current.signal);
       setResult({ data, source: text });
     } catch (e) {
       if ((e as Error).name !== 'AbortError') setError(e as ApiError);
@@ -71,7 +75,7 @@ export default function Translate() {
 
   return (
     <>
-      <PageHead title="Translate" desc="Paste a message in Tagalog, Taglish or English. Salin reads it with your glossary." />
+      <PageHead title="Translate" desc="Paste or record a message in any of your languages. Salin reads it with your glossary." />
       <div className="page-body">
         <NoKeyNotice />
         <div className="work">
@@ -87,10 +91,20 @@ export default function Translate() {
                 onChange={(e) => setText(e.target.value)} onKeyDown={(e) => submitOnModEnter(e, () => void submit())}
                 placeholder="Paste the message here" aria-describedby="msg-count" aria-invalid={tooLong} autoFocus />
               {tooLong && <p className="field-error">Shorten the message to {MAX.toLocaleString()} characters or fewer.</p>}
+              <Recorder language={source} onText={(t) => setText((cur) => (cur.trim() ? `${cur.trimEnd()}\n${t}` : t))} label="Record a message" />
             </div>
 
-            <Segmented legend="Direction" value={direction} onChange={setDirection}
-              options={[{ value: 'auto', label: 'Detect' }, { value: 'to_english', label: 'Into English' }, { value: 'to_tagalog', label: 'Into Tagalog' }]} />
+            <div className="pair">
+              <LanguageSelect label="From" value={source} onChange={setSource} languages={enabled} auto />
+              <button type="button" className="btn btn-icon pair-swap" aria-label="Swap languages" disabled={source === 'auto'}
+                onClick={() => { setSource(target); setTarget(source); }}>
+                <ArrowLeftRight size={18} aria-hidden="true" />
+              </button>
+              <LanguageSelect label="Into" value={target} onChange={setTarget} languages={enabled} />
+            </div>
+            {source === 'auto' && settings && (
+              <p className="hint">If the message is already in the target language, it goes into {enabled.find((l) => l.code === settings.second_language)?.name ?? 'your second language'} instead.</p>
+            )}
             <ModelPicker value={model} onChange={setModel} />
 
             <details className="more">

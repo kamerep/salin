@@ -1,9 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from './api';
-import type { Settings } from './types';
+import type { Language, Settings } from './types';
 
 interface SettingsCtx {
   settings: Settings | null;
+  languages: Language[];
+  enabled: Language[];
+  langName: (code: string) => string;
+  reloadLanguages: () => Promise<void>;
   error: string | null;
   refresh: () => Promise<void>;
   update: (patch: Partial<Settings>) => Promise<Settings>;
@@ -15,6 +19,18 @@ const Ctx = createContext<SettingsCtx | null>(null);
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [languages, setLanguages] = useState<Language[]>([]);
+  const reloadLanguages = useCallback(async () => {
+    try { setLanguages(await api.languages()); } catch (e) { setError((e as Error).message); }
+  }, []);
+  const enabled = useMemo(() => languages.filter((l) => l.enabled), [languages]);
+  const langName = useCallback((code: string) => {
+    const l = languages.find((x) => x.code === code);
+    if (l) return l.name;
+    if (code === 'mixed') return 'Mixed';
+    if (!code || code === 'other') return 'Other';
+    return code;
+  }, [languages]);
   const refresh = useCallback(async () => {
     try {
       setSettings(await api.settings());
@@ -28,8 +44,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setSettings(next);
     return next;
   }, []);
-  useEffect(() => { void refresh(); }, [refresh]);
-  return <Ctx.Provider value={{ settings, error, refresh, update, setLocal: setSettings }}>{children}</Ctx.Provider>;
+  useEffect(() => { void refresh(); void reloadLanguages(); }, [refresh, reloadLanguages]);
+  return (
+    <Ctx.Provider value={{ settings, error, refresh, update, setLocal: setSettings, languages, enabled, langName, reloadLanguages }}>
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function useSettings() {

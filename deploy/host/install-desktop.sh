@@ -4,7 +4,6 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 BIN="$HOME/.local/bin"; APPS="$HOME/.local/share/applications"; ICONS="$HOME/.local/share/icons/hicolor/scalable/apps"
-IP="${SALIN_IP:-10.246.248.60}"
 mkdir -p "$BIN" "$APPS" "$ICONS"
 install -m 755 "$HERE/salin-open" "$BIN/salin-open"
 install -m 755 "$HERE/salin-clip" "$BIN/salin-clip"
@@ -20,7 +19,7 @@ Icon=salin
 Terminal=false
 Categories=Office;Utility;
 Keywords=translate;tagalog;taglish;filipino;
-StartupWMClass=brave-${IP}__-Default
+StartupWMClass=brave-localhost__-Default
 Actions=clipboard;
 
 [Desktop Action clipboard]

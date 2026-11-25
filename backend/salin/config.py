@@ -29,6 +29,8 @@ class Config:
     )
     ollama_url: str = field(default_factory=lambda: _env("SALIN_OLLAMA_URL", "http://127.0.0.1:11434"))
     ollama_model: str = field(default_factory=lambda: _env("SALIN_OLLAMA_MODEL", "llama3.1:8b"))
+    # Loopback address on the host (a secure context, so the microphone works).
+    local_url: str = field(default_factory=lambda: _env("SALIN_LOCAL_URL", ""))
 
     @property
     def db_path(self) -> Path:

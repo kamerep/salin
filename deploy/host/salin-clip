@@ -3,7 +3,7 @@
 # show the result as a desktop notification. Bind it to a keyboard shortcut.
 # Needs wl-clipboard on Wayland (sudo apt install wl-clipboard) or xclip on X11.
 set -uo pipefail
-URL="${SALIN_URL:-http://10.246.248.60:8795}"
+URL="${SALIN_URL:-http://localhost:8797}"
 primary=""; [ "${1:-}" = "--selection" ] && primary=1
 
 if command -v wl-paste >/dev/null 2>&1; then

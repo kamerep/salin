@@ -2,7 +2,7 @@
 # Open Salin as a desktop app window. Starts the container if it is stopped.
 set -euo pipefail
 CT="${SALIN_CONTAINER:-salin}"
-URL="${SALIN_URL:-http://10.246.248.60:8795}"
+URL="${SALIN_URL:-http://localhost:8797}"
 if [ "$(lxc list "$CT" -c s -f csv 2>/dev/null)" != "RUNNING" ]; then
   notify-send -i salin "Salin" "Starting the salin container" 2>/dev/null || true
   lxc start "$CT"

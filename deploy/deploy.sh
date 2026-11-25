@@ -7,6 +7,7 @@ set -euo pipefail
 CT="${SALIN_CONTAINER:-salin}"
 IP="${SALIN_IP:-10.246.248.60}"
 PORT="${SALIN_PORT:-8795}"
+LOCAL_PORT="${SALIN_LOCAL_PORT:-8797}"   # host loopback port (secure context for the microphone)
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 
@@ -34,6 +35,7 @@ in_ct bash -c '
   set -e
   command -v python3 >/dev/null && dpkg -s python3-venv >/dev/null 2>&1 || {
     export DEBIAN_FRONTEND=noninteractive; apt-get update -qq; apt-get install -y -qq python3-venv sqlite3 >/dev/null; }
+  command -v espeak-ng >/dev/null || { export DEBIAN_FRONTEND=noninteractive; apt-get install -y -qq espeak-ng >/dev/null; }
   id salin >/dev/null 2>&1 || useradd --system --home /var/lib/salin --shell /usr/sbin/nologin salin
   install -d -o salin -g salin -m 700 /var/lib/salin /var/lib/salin/backups /etc/salin
   install -d -o root -g root -m 755 /opt/salin
@@ -59,11 +61,22 @@ SALIN_PORT=$PORT
 SALIN_DATA_DIR=/var/lib/salin
 SALIN_ENV_FILE=/etc/salin/salin.env
 SALIN_STATIC_DIR=/opt/salin/app/frontend/dist
-SALIN_ALLOWED_HOSTS=salin.lxd,$IP
+SALIN_ALLOWED_HOSTS=salin.lxd,$IP,localhost,127.0.0.1
+SALIN_LOCAL_URL=http://localhost:$LOCAL_PORT
 SALIN_OLLAMA_URL=http://127.0.0.1:11434
 SALIN_OLLAMA_MODEL=llama3.1:8b
 CONF
   chown salin:salin /etc/salin/salin.env; chmod 600 /etc/salin/salin.env; }"
+
+say "Env file upgrades (keep the key and other values)"
+in_ct bash -c "f=/etc/salin/salin.env
+  grep -q '^SALIN_ALLOWED_HOSTS=.*localhost' \$f || sed -i 's/^SALIN_ALLOWED_HOSTS=.*/SALIN_ALLOWED_HOSTS=salin.lxd,$IP,localhost,127.0.0.1/' \$f
+  grep -q '^SALIN_LOCAL_URL=' \$f || echo 'SALIN_LOCAL_URL=http://localhost:$LOCAL_PORT' >> \$f"
+
+say "Loopback access: host localhost:$LOCAL_PORT -> container (not exposed to the LAN)"
+lxc config device show "$CT" | grep -q '^web:' ||
+  lxc config device add "$CT" web proxy bind=host \
+    listen=tcp:127.0.0.1:$LOCAL_PORT connect=tcp:$IP:$PORT >/dev/null
 
 say "Offline fallback: container localhost:11434 -> host Ollama (not exposed to the LAN)"
 lxc config device show "$CT" | grep -q '^ollama:' ||
@@ -95,7 +108,7 @@ say "Health check"
 for _ in $(seq 1 20); do
   if curl -fsS "http://$IP:$PORT/api/health" >/dev/null 2>&1; then
     curl -fsS "http://$IP:$PORT/api/health"; echo
-    echo "Salin is up: http://$IP:$PORT  (http://salin.lxd:$PORT once .lxd DNS is enabled)"
+    echo "Salin is up: http://localhost:$LOCAL_PORT  (also http://$IP:$PORT on the bridge)"
     exit 0
   fi
   sleep 1

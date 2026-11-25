@@ -326,3 +326,15 @@ dialog.modal[open] { animation: pop var(--dur-ui) var(--ease-out); }
 .pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 code { font-family: var(--font-mono); font-size: 0.9em; padding: 1px 5px; border-radius: 4px; background: var(--surface-sunk); border: 1px solid var(--line); }
 .noscript { padding: 24px; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: var(--s-2); align-items: end; }
+.pair-swap { margin-block-end: 0; }
+@media (max-width: 420px) { .pair { grid-template-columns: minmax(0, 1fr); } .pair-swap { justify-self: start; } }
+.recorder { display: grid; gap: var(--s-2); }
+.rec-time { font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
+.rec-dot { display: inline-flex; align-items: center; gap: 6px; font-size: var(--step--1); font-weight: 600; color: var(--bad-fg); }
+.rec-dot::before { content: ""; inline-size: 8px; block-size: 8px; border-radius: 50%; background: currentColor; }
+.block { display: block; }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); font-size: var(--step--1); color: var(--muted); }
+.crumbs a { color: var(--accent-strong); }
+.register-row { border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s-4); margin: 0; display: grid; gap: var(--s-3); min-inline-size: 0; }
+.crumbs a, .table .term a { display: inline-flex; align-items: center; min-block-size: var(--control-h); min-inline-size: var(--control-h); }
